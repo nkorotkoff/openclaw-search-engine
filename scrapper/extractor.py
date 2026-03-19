@@ -7,6 +7,44 @@ from playwright.async_api import Page
 
 from .browser import StealthBrowser
 
+
+async def _wait_for_content(page, max_wait: float = 10.0, poll: float = 0.5):
+    """Wait until the page has meaningful content (not just a loading screen).
+
+    Polls page body text length until it stabilizes or max_wait is reached.
+    Handles JS challenges (WB), lazy rendering (DNS), SPAs, etc.
+    """
+    import asyncio
+
+    elapsed = 0.0
+    prev_len = 0
+    stable_count = 0
+
+    while elapsed < max_wait:
+        await asyncio.sleep(poll)
+        elapsed += poll
+        try:
+            body_len = await page.evaluate("document.body ? document.body.innerText.length : 0")
+        except Exception:
+            body_len = 0
+
+        if body_len > 500:
+            if body_len == prev_len:
+                stable_count += 1
+                if stable_count >= 2:
+                    return
+            else:
+                stable_count = 0
+            prev_len = body_len
+        # Check for challenge screens — keep waiting
+        elif elapsed > 3.0 and body_len < 100:
+            prev_len = body_len
+            continue
+
+    # Final delay to let last renders finish
+    await asyncio.sleep(0.5)
+
+
 # Tags that usually contain useful content
 _CONTENT_TAGS = {"p", "li", "td", "th", "h1", "h2", "h3", "h4", "span", "div", "a"}
 # Tags to strip completely
@@ -23,7 +61,8 @@ async def extract_page(page: Page, url: str, timeout: int = 20000) -> dict:
     except Exception as e:
         return {"url": url, "title": "", "text": "", "links": [], "error": str(e)}
 
-    await StealthBrowser.human_delay(0.8, 1.5)
+    # Wait for JS-rendered content (SPA sites like DNS, WB)
+    await _wait_for_content(page)
 
     html = await page.content()
     title = await page.title()

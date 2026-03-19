@@ -14,6 +14,7 @@ from playwright.async_api import Page, Dialog
 from bs4 import BeautifulSoup, Tag
 
 from .browser import StealthBrowser
+from .extractor import _wait_for_content
 
 
 def _extract_interactive(html: str, title: str, url: str) -> dict:
@@ -244,12 +245,12 @@ async def interactive_session(
             _send({"status": "ok", "action": "search", "results": results})
             if results:
                 await page.goto(results[0]["url"], wait_until="domcontentloaded")
-                await StealthBrowser.human_delay(2.0, 4.0)
+                await _wait_for_content(page)
                 state = await _get_page_state(page)
                 _send({"status": "ok", "action": "initial_page", **state})
         elif start_url:
             await page.goto(start_url, wait_until="domcontentloaded")
-            await StealthBrowser.human_delay(2.0, 4.0)
+            await _wait_for_content(page)
             state = await _get_page_state(page)
             _send({"status": "ok", "action": "goto", **state})
         else:
@@ -283,7 +284,7 @@ async def interactive_session(
                     url = cmd["url"]
                     try:
                         await page.goto(url, wait_until="domcontentloaded", timeout=20000)
-                        await StealthBrowser.human_delay(1.5, 3.0)
+                        await _wait_for_content(page)
                         state = await _get_page_state(page)
                         resp = {"status": "ok", "action": "goto", **state}
                         if dialog_info:
